@@ -1,0 +1,21 @@
+{
+  "profile": {
+    "name": "Edgar Janota",
+    "email": "edgar@example.com",
+    "phone": "+244 923 456 789",
+    "title": "Senior Fullstack Developer",
+    "summary": "Desenvolvedor com 5+ anos de experiência em Node.js, TypeScript, Rust e sistemas distribuídos.",
+    "skills": ["Node.js", "TypeScript", "Rust", "PostgreSQL", "React", "Docker"],
+    "experience_years": 5,
+    "linkedin": "https://linkedin.com/in/edgarjanota",
+    "github": "https://github.com/edgarjanota"
+  },
+  "smtp": {
+    "host": "smtp.gmail.com",
+    "port": 587
+  },
+  "template": {
+    "subject": "Candidatura - {{title}} - {{name}}",
+    "body": "Prezados,\n\nVenho expressar meu interesse em oportunidades na vossa empresa.\n\n{{summary}}\n\nCompetências: {{skills}}\nExperiência: {{experience_years}} anos\n\nContacto:\n- Email: {{email}}\n- Telefone: {{phone}}\n- LinkedIn: {{linkedin}}\n- GitHub: {{github}}\n\nEm anexo segue o meu CV.\n\nAtenciosamente,\n{{name}}"
+  }
+}
