@@ -17,3 +17,4 @@ thiserror = "1.0"
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
+tempfile = "3.24.0"

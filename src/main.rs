@@ -402,3 +402,193 @@ async fn main() -> Result<()> {
     
     Ok(())
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{env, fs, io::Write};
+    use tempfile::TempDir;
+
+    fn setup_test_env() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+
+        let config = Config {
+            profile: Profile {
+                name: "João Silva".to_string(),
+                email: "joao@example.com".to_string(),
+                phone: "+351 912 345 678".to_string(),
+                title: "Desenvolvedor Rust".to_string(),
+                summary: "Desenvolvedor experiente".to_string(),
+                skills: vec!["Rust".to_string(), "Tokio".to_string()],
+                experience_years: 5,
+                linkedin: Some("linkedin.com/in/joao".to_string()),
+                github: Some("github.com/joao".to_string()),
+            },
+            smtp: SmtpConfig {
+                host: "smtp.example.com".to_string(),
+                port: 587,
+            },
+            template: EmailTemplate {
+                subject: "Candidatura - {{name}} - {{title}}".to_string(),
+                body: "Olá,\nNome: {{name}}\nEmail: {{email}}\nSkills: {{skills}}\nLinkedIn: {{linkedin}}".to_string(),
+            },
+        };
+
+        let config_path = temp_dir.path().join(CONFIG_FILE);
+        let config_json = serde_json::to_string_pretty(&config).unwrap();
+        fs::write(&config_path, config_json).unwrap();
+
+        let cv_path = temp_dir.path().join(CV_FILE);
+        let mut cv_file = fs::File::create(cv_path).unwrap();
+        cv_file.write_all(b"%PDF-1.4 fake pdf content").unwrap();
+
+        let log_path = temp_dir.path().join(LOG_FILE);
+        fs::write(&log_path, "{\"records\":[]}").unwrap();
+
+        temp_dir
+    }
+
+    macro_rules! with_temp_dir {
+        ($temp_dir:expr, $body:expr) => {{
+            let old_dir = std::env::current_dir().unwrap();
+            std::env::set_current_dir($temp_dir.path()).unwrap();
+            let result = $body;
+            std::env::set_current_dir(old_dir).unwrap();
+            result
+        }};
+    }
+
+    #[test]
+    fn test_load_config() {
+        let temp_dir = setup_test_env();
+        with_temp_dir!(temp_dir, {
+            let config = load_config().unwrap();
+            assert_eq!(config.profile.name, "João Silva");
+            assert_eq!(config.profile.title, "Desenvolvedor Rust");
+            assert_eq!(config.smtp.port, 587);
+        });
+    }
+
+    #[test]
+    fn test_load_cv() {
+        let temp_dir = setup_test_env();
+        with_temp_dir!(temp_dir, {
+            let cv = load_cv().unwrap();
+            assert!(cv.len() > 10);
+        });
+    }
+
+    #[test]
+    fn test_load_log_empty() {
+        let temp_dir = setup_test_env();
+        with_temp_dir!(temp_dir, {
+            let log = load_log();
+            assert!(log.records.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_save_and_load_log() {
+        let temp_dir = setup_test_env();
+        with_temp_dir!(temp_dir, {
+            let mut log = SentLog::default();
+            log.records.push(SentRecord {
+                email: "test@example.com".to_string(),
+                sent_at: Local::now(),
+                success: true,
+                error: None,
+            });
+            save_log(&log).unwrap();
+
+            let loaded = load_log();
+            assert_eq!(loaded.records.len(), 1);
+            assert_eq!(loaded.records[0].email, "test@example.com");
+            assert!(loaded.records[0].success);
+        });
+    }
+
+    #[test]
+    fn test_build_email() {
+        let temp_dir = setup_test_env();
+        with_temp_dir!(temp_dir, {
+            let config = load_config().unwrap();
+            let (subject, body) = build_email(&config);
+
+            assert_eq!(subject, "Candidatura - João Silva - Desenvolvedor Rust");
+            assert!(body.contains("João Silva"));
+            assert!(body.contains("joao@example.com"));
+            assert!(body.contains("Rust, Tokio"));
+            assert!(body.contains("linkedin.com/in/joao"));
+        });
+    }
+
+    #[test]
+    fn test_build_email_with_missing_optionals() {
+        let config = Config {
+            profile: Profile {
+                name: "Ana".to_string(),
+                email: "ana@example.com".to_string(),
+                phone: "123".to_string(),
+                title: "Dev".to_string(),
+                summary: "Sum".to_string(),
+                skills: vec![],
+                experience_years: 3,
+                linkedin: None,
+                github: None,
+            },
+            smtp: SmtpConfig {
+                host: "host".to_string(),
+                port: 25,
+            },
+            template: EmailTemplate {
+                subject: "{{name}} - {{title}}".to_string(),
+                body: "{{linkedin}} {{github}} {{experience_years}}".to_string(),
+            },
+        };
+
+        let (subject, body) = build_email(&config);
+        assert_eq!(subject, "Ana - Dev");
+        assert_eq!(body, "N/A N/A 3");
+    }
+
+    #[test]
+    fn test_get_smtp_creds_success() {
+        env::set_var("SMTP_USER", "user@test.com");
+        env::set_var("SMTP_PASS", "secret");
+        get_smtp_creds().unwrap();
+        env::remove_var("SMTP_USER");
+        env::remove_var("SMTP_PASS");
+    }
+
+    #[test]
+    fn test_get_smtp_creds_missing_user() {
+        env::remove_var("SMTP_USER");
+        env::remove_var("SMTP_PASS");
+        assert!(get_smtp_creds().is_err());
+    }
+
+    #[test]
+    fn test_get_smtp_creds_missing_pass() {
+        env::set_var("SMTP_USER", "user@test.com");
+        env::remove_var("SMTP_PASS");
+        assert!(get_smtp_creds().is_err());
+        env::remove_var("SMTP_USER");
+    }
+
+    #[test]
+    fn test_load_config_missing_file() {
+        let temp_dir = TempDir::new().unwrap();
+        with_temp_dir!(temp_dir, {
+            assert!(load_config().is_err());
+        });
+    }
+
+    #[test]
+    fn test_load_cv_missing_file() {
+        let temp_dir = TempDir::new().unwrap();
+        with_temp_dir!(temp_dir, {
+            assert!(load_cv().is_err());
+        });
+    }
+}
